@@ -11,8 +11,8 @@ namespace kinectfusion {
         namespace cuda {
 
             __global__
-            void update_tsdf_kernel(const PtrStepSz<float> depth_image, const PtrStepSz<uchar3> color_image,
-                                    PtrStepSz<short2> tsdf_volume, PtrStepSz<uchar3> color_volume,
+            void update_tsdf_kernel(const PtrStepSz<float> depth_image, const PtrStepSz<uchar> color_image,
+                                    PtrStepSz<short2> tsdf_volume, PtrStepSz<uchar> color_volume,
                                     int3 volume_size, float voxel_scale,
                                     CameraParameters cam_params, const float truncation_distance,
                                     Eigen::Matrix<float, 3, 3, Eigen::DontAlign> rotation, Vec3fda translation)
@@ -72,18 +72,18 @@ namespace kinectfusion {
                                                                                 static_cast<short>(new_weight));
 
                         if (sdf <= truncation_distance / 2 && sdf >= -truncation_distance / 2) {
-                            uchar3& model_color = color_volume.ptr(z * volume_size.y + y)[x];
-                            const uchar3 image_color = color_image.ptr(uv.y())[uv.x()];
+                            uchar& model_color = color_volume.ptr(z * volume_size.y + y)[x];
+                            const uchar image_color = color_image.ptr(uv.y())[uv.x()];
 
-                            model_color.x = static_cast<uchar>(
-                                    (current_weight * model_color.x + add_weight * image_color.x) /
+                            model_color = static_cast<uchar>(
+                                    (current_weight * model_color + add_weight * image_color) /
                                     (current_weight + add_weight));
-                            model_color.y = static_cast<uchar>(
-                                    (current_weight * model_color.y + add_weight * image_color.y) /
-                                    (current_weight + add_weight));
-                            model_color.z = static_cast<uchar>(
-                                    (current_weight * model_color.z + add_weight * image_color.z) /
-                                    (current_weight + add_weight));
+                            // model_color.y = static_cast<uchar>(
+                            //         (current_weight * model_color.y + add_weight * image_color.y) /
+                            //         (current_weight + add_weight));
+                            // model_color.z = static_cast<uchar>(
+                            //         (current_weight * model_color.z + add_weight * image_color.z) /
+                            //         (current_weight + add_weight));
                         }
                     }
                 }

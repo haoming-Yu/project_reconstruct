@@ -160,7 +160,7 @@ namespace kinectfusion {
 
         // The distance (in mm) after which to set the depth in incoming depth frames to 0.
         // Can be used to separate an object you want to scan from the background
-        float depth_cutoff_distance { 5000.f };
+        float depth_cutoff_distance { 3000.f };
 
         // The number of pyramid levels to generate for each frame, including the original frame level
         int num_levels { 3 };
@@ -188,14 +188,15 @@ namespace kinectfusion {
         struct FrameData {
             std::vector<GpuMat> depth_pyramid;
             std::vector<GpuMat> smoothed_depth_pyramid;
-            std::vector<GpuMat> color_pyramid;
+            std::vector<GpuMat> ir_pyramid;
+            std::vector<GpuMat> depth_confidence_mask;
 
             std::vector<GpuMat> vertex_pyramid;
             std::vector<GpuMat> normal_pyramid;
 
             explicit FrameData(const size_t pyramid_height) :
                     depth_pyramid(pyramid_height), smoothed_depth_pyramid(pyramid_height),
-                    color_pyramid(pyramid_height), vertex_pyramid(pyramid_height), normal_pyramid(pyramid_height)
+                    ir_pyramid(pyramid_height), depth_confidence_mask(pyramid_height), vertex_pyramid(pyramid_height), normal_pyramid(pyramid_height)
             { }
 
             // No copying constructor
@@ -206,7 +207,8 @@ namespace kinectfusion {
             FrameData(FrameData&& data) noexcept :
                     depth_pyramid(std::move(data.depth_pyramid)),
                     smoothed_depth_pyramid(std::move(data.smoothed_depth_pyramid)),
-                    color_pyramid(std::move(data.color_pyramid)),
+                    ir_pyramid(std::move(data.ir_pyramid)),
+                    depth_confidence_mask(std::move(data.depth_confidence_mask)),
                     vertex_pyramid(std::move(data.vertex_pyramid)),
                     normal_pyramid(std::move(data.normal_pyramid))
             { }
@@ -216,7 +218,8 @@ namespace kinectfusion {
             {
                 depth_pyramid = std::move(data.depth_pyramid);
                 smoothed_depth_pyramid = std::move(data.smoothed_depth_pyramid);
-                color_pyramid = std::move(data.color_pyramid);
+                ir_pyramid = std::move(data.ir_pyramid);
+                depth_confidence_mask = std::move(data.depth_confidence_mask);
                 vertex_pyramid = std::move(data.vertex_pyramid);
                 normal_pyramid = std::move(data.normal_pyramid);
                 return *this;

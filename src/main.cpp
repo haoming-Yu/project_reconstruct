@@ -6,7 +6,7 @@
 #include "depth_interface.h"
 #include "kinectfusion.h"
 
-#define DESIRED_FRAME_NUM 60
+#define DESIRED_FRAME_NUM 240
 
 int main()
 {
@@ -41,9 +41,17 @@ int main()
 		// ------------ code start ------------
 		device.get_depth_raw(); // bottleneck, the max time consuming limited this to be less than 19 fps
 		device.get_ir_raw();
+		device.filter();
 		device.displayAndSaveImage(device.showDepthImage(device.width, device.height, device.depth_data), std::string("../sample/Depth/") + std::to_string(store_idx) + std::string(".jpg"));
-		// device.displayAndSaveImage(device.showIRImage(device.width, device.height, device.ir_data), std::string("../sample/IR/") + std::to_string(store_idx) + std::string(".jpg"));
-		bool success = pipeline.process_frame(cv::Mat_<float>(device.height, device.width, const_cast<float*>(device.depth_float32.data())));
+		device.displayAndSaveImage(device.showIRImage(device.width, device.height, device.ir_data), std::string("../sample/IR/") + std::to_string(store_idx) + std::string(".jpg"));
+		device.displayAndSaveImage(device.showMaskImage(device.width, device.height, device.depth_confidence_mask), std::string("../sample/Mask/") + std::to_string(store_idx) + std::string(".jpg"));
+		std::cout << "start processing" << std::endl;
+		bool success = pipeline.process_frame(
+			cv::Mat_<float>(device.height, device.width, const_cast<float*>(device.depth_float32.data())), 
+			cv::Mat_<unsigned char>(device.height, device.width, const_cast<unsigned char*>(device.ir_unsigned_char.data())),
+			cv::Mat_<unsigned char>(device.height, device.width, const_cast<unsigned char*>(device.depth_confidence_mask.data())));
+		// bool success = pipeline.process_frame(
+		// 	cv::Mat_<float>(device.height, device.width, const_cast<float*>(device.depth_float32.data())));
 		if (!success) {
     		std::cout << "Frame could not be processed" << std::endl;
 		}

@@ -40,8 +40,9 @@ namespace kinectfusion {
          * @param color_map The RGB color map. Must be a matrix (datatype CV_8UC3)
          * @return Whether the frame has been fused successfully. Will only be false if the ICP failed.
          */
-        bool process_frame(const cv::Mat_<float>& depth_map, const cv::Mat_<cv::Vec3b>& color_map);
-        bool process_frame(const cv::Mat_<float>& depth_map);
+        // bool process_frame(const cv::Mat_<float>& depth_map, const cv::Mat_<cv::Vec3b>& color_map);
+        // bool process_frame(const cv::Mat_<float>& depth_map);
+        bool process_frame(const cv::Mat_<float>& depth_map, const cv::Mat_<unsigned char>& ir_frame, const cv::Mat_<unsigned char>& ir_filter_mask);
         
         /**
          * Retrieve all camera poses computed so far
@@ -112,12 +113,17 @@ namespace kinectfusion {
          * Step 1: SURFACE MEASUREMENT
          * Compute vertex and normal maps and their pyramids
          */
+        // FrameData surface_measurement(const cv::Mat_<float>& input_frame,
+        //                               const CameraParameters& camera_params,
+        //                               const size_t num_levels, const float depth_cutoff,
+        //                               const int kernel_size, const float color_sigma, const float spatial_sigma);
+
         FrameData surface_measurement(const cv::Mat_<float>& input_frame,
+                                      const cv::Mat_<unsigned char>& ir_frame,
+                                      const cv::Mat_<unsigned char>& ir_filter_mask,
                                       const CameraParameters& camera_params,
                                       const size_t num_levels, const float depth_cutoff,
                                       const int kernel_size, const float color_sigma, const float spatial_sigma);
-
-
         /*
          * Step 2: POSE ESTIMATION
          * Use ICP with measured depth and predicted surface to localize camera

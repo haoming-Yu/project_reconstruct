@@ -6,8 +6,9 @@
 
 #define DEPTH_MIN 10
 #define DEPTH_MAX 5000
-#define COMFIDENT_GAMMA         ( 1/2.2 )
-#define COMFIDENT_MAX_VALUE     ( 8191.0 ) //0x1FFF
+#define CONFIDENT_GAMMA         ( 1/2.2 )
+#define CONFIDENT_MAX_VALUE     ( 8191.0 ) //0x1FFF
+#define CONFIDENT_THRES_VALUE   ( 1023.0 ) //0x03FF
 
 depth_interface::depth_interface()
 {
@@ -62,6 +63,20 @@ bool depth_interface::setup_devices()
 		return false;
 	}
 
+	this->auto_exposure.open_type = OTOCAM_AE_ON;
+    this->auto_exposure.x = 0;
+    this->auto_exposure.y = 0;
+    this->auto_exposure.width = 640;
+    this->auto_exposure.height = 480;
+    this->auto_exposure.time_range_min = 10;
+    this->auto_exposure.time_range_max = 1000;
+    this->auto_exposure.active_typical = 500;
+
+	if (!depth_interface::set_auto_exposure(this->auto_exposure)) {
+		std::cerr << "[Error]: set_auto_exposure() failed" << std::endl;
+		return false;
+	}
+
 	return true;
 }
 
@@ -101,6 +116,19 @@ bool depth_interface::get_camera_list()
 	return true;
 }
 
+void depth_interface::filter()
+{
+	this->depth_confidence_mask.reserve(this->width * this->height * sizeof(unsigned char));
+	unsigned short* confident_src = (unsigned short*)this->ir_data.data();
+	for (int i = 0; i < this->width * this->height; ++i) {
+		if (confident_src[i] < CONFIDENT_THRES_VALUE) {
+			this->depth_confidence_mask[i] = 0;
+		} else {
+			this->depth_confidence_mask[i] = 255;
+		}
+	}
+}
+
 bool depth_interface::select_device(int intend_id)
 {
 	for (unsigned int idx = 0; idx < this->m_all_camera_id.size(); ++idx) {
@@ -127,6 +155,17 @@ bool depth_interface::start_camera()
 	return true;
 }
 
+bool depth_interface::set_auto_exposure(otocam_exposure_t auto_exposure)
+{
+    // Set auto exposure on/off
+    int res = otocam_set_auto_exposure(this->m_selected_device_id, auto_exposure);
+    if (res != OTOCAM_OK) {
+        return false;
+    }
+
+	return true;
+}
+
 void depth_interface::get_depth_raw()
 {
 	otocam_frame_t frame_t;
@@ -149,10 +188,8 @@ void depth_interface::get_depth_raw()
 		this->width = frame_t.width;
 		this->height = frame_t.height;
 		const unsigned short* depth_src = reinterpret_cast<const unsigned short*>(this->depth_data.data());
-		for (int i = 0; i < this->height; ++i) {
-			for (int j = 0; j < this->width; ++j) {
-				this->depth_float32[i * this->width + j] = (float)depth_src[i * this->width + j];
-			}
+		for (int i = 0; i < width * height; i++) {
+			this->depth_float32[i] = (float)depth_src[i];
 		}
 	} else {
 		std::cerr << "[Error]: Camera Stopped, stream not started" << std::endl;
@@ -174,6 +211,7 @@ void depth_interface::get_ir_raw()
 		}
 
 		this->ir_data.reserve(frame_t.width * frame_t.height * sizeof(short));
+		this->ir_unsigned_char.reserve(frame_t.width * frame_t.height * sizeof(unsigned char));
 
 		int error;
 		otocam_frame_t frame_ir = otocam_extract_frame(frame_t, OTOCAM_FRAME_DATA_IR, &error);
@@ -181,6 +219,11 @@ void depth_interface::get_ir_raw()
 		memcpy(ir_data_address, frame_ir.data, frame_t.width * frame_t.height * sizeof(short));
 		this->width = frame_t.width;
 		this->height = frame_t.height;
+		for (int i = 0; i < width * height; i++) {
+			float gamma = CONFIDENT_GAMMA;
+			float filter = ((this->ir_data[i] >> 3) / CONFIDENT_MAX_VALUE);
+			this->ir_unsigned_char[i] = (unsigned char)(pow(filter, gamma) * 255.0);
+		}
 	} else {
 		std::cerr << "[Error]: Camera Stopped, stream not started" << std::endl;
 		return;
@@ -197,8 +240,8 @@ cv::Mat depth_interface::showIRImage(int width, int height, const std::vector<ch
 
     //convert confident data to grayscale
     for( int i=0; i < width*height; i++ ){
-        float gamma = COMFIDENT_GAMMA;
-        float filter = ( ( confident_src[ i ] >> 3 ) / COMFIDENT_MAX_VALUE );
+        float gamma = CONFIDENT_GAMMA;
+        float filter = ( ( confident_src[ i ] >> 3 ) / CONFIDENT_MAX_VALUE );
 
         confident_filter[i] = (unsigned char)( pow( filter, gamma ) * 255.0 );
     }
@@ -219,6 +262,12 @@ cv::Mat depth_interface::showDepthImage(int width, int height, const std::vector
     cv::threshold(depth_visual, depth_visual, 0, 0, cv::THRESH_TOZERO);
 
     return depth_visual;
+}
+
+cv::Mat depth_interface::showMaskImage(int width, int height, std::vector<unsigned char>& frame)
+{
+	cv::Mat mask_visual(height, width, CV_8UC1, reinterpret_cast<unsigned char*>(frame.data()));
+	return mask_visual;
 }
 
 bool depth_interface::displayAndSaveImage(const cv::Mat& image, const std::string& savePath) 

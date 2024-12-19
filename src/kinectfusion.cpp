@@ -2,7 +2,7 @@
 // Author: Christian Diller, git@christian-diller.de
 
 #include <kinectfusion.h>
-
+#include <iostream>
 #include <fstream>
 
 using cv::cuda::GpuMat;
@@ -23,18 +23,16 @@ namespace kinectfusion {
         current_pose(2, 3) = _configuration.volume_size.z / 2 * _configuration.voxel_scale - _configuration.init_depth;
     }
 
-    bool Pipeline::process_frame(const cv::Mat_<float>& depth_map)
+    bool Pipeline::process_frame(const cv::Mat_<float>& depth_map, const cv::Mat_<unsigned char>& ir_frame, const cv::Mat_<unsigned char>& ir_filter_mask)
     {
         // STEP 1: Surface measurement
-        internal::FrameData frame_data = internal::surface_measurement(depth_map, camera_parameters,
+        std::cout << "start surface measurement" << std::endl;
+        internal::FrameData frame_data = internal::surface_measurement(depth_map, ir_frame, ir_filter_mask, camera_parameters,
                                                                        configuration.num_levels,
                                                                        configuration.depth_cutoff_distance,
                                                                        configuration.bfilter_kernel_size,
                                                                        configuration.bfilter_color_sigma,
                                                                        configuration.bfilter_spatial_sigma);
-        cv::Mat_<cv::Vec3b> fake_color_map(480, 640);
-        frame_data.color_pyramid[0].upload(fake_color_map);
-
         // STEP 2: Pose estimation
         bool icp_success { true };
         if (frame_id > 0) { // Do not perform ICP for the very first frame
@@ -49,7 +47,7 @@ namespace kinectfusion {
         poses.push_back(current_pose);
 
         // STEP 3: Surface reconstruction
-        internal::cuda::surface_reconstruction(frame_data.depth_pyramid[0], frame_data.color_pyramid[0],
+        internal::cuda::surface_reconstruction(frame_data.depth_pyramid[0], frame_data.ir_pyramid[0],
                                                volume, camera_parameters, configuration.truncation_distance,
                                                current_pose.inverse());
 
@@ -69,50 +67,94 @@ namespace kinectfusion {
         return true;
     }
 
-    bool Pipeline::process_frame(const cv::Mat_<float>& depth_map, const cv::Mat_<cv::Vec3b>& color_map)
-    {
-        // STEP 1: Surface measurement
-        internal::FrameData frame_data = internal::surface_measurement(depth_map, camera_parameters,
-                                                                       configuration.num_levels,
-                                                                       configuration.depth_cutoff_distance,
-                                                                       configuration.bfilter_kernel_size,
-                                                                       configuration.bfilter_color_sigma,
-                                                                       configuration.bfilter_spatial_sigma);
-        frame_data.color_pyramid[0].upload(color_map);
+    // bool Pipeline::process_frame(const cv::Mat_<float>& depth_map)
+    // {
+    //     // STEP 1: Surface measurement
+    //     internal::FrameData frame_data = internal::surface_measurement(depth_map, camera_parameters,
+    //                                                                    configuration.num_levels,
+    //                                                                    configuration.depth_cutoff_distance,
+    //                                                                    configuration.bfilter_kernel_size,
+    //                                                                    configuration.bfilter_color_sigma,
+    //                                                                    configuration.bfilter_spatial_sigma);
 
-        // STEP 2: Pose estimation
-        bool icp_success { true };
-        if (frame_id > 0) { // Do not perform ICP for the very first frame
-            icp_success = internal::pose_estimation(current_pose, frame_data, model_data, camera_parameters,
-                                                    configuration.num_levels,
-                                                    configuration.distance_threshold, configuration.angle_threshold,
-                                                    configuration.icp_iterations);
-        }
-        if (!icp_success)
-            return false;
+    //     // STEP 2: Pose estimation
+    //     bool icp_success { true };
+    //     if (frame_id > 0) { // Do not perform ICP for the very first frame
+    //         icp_success = internal::pose_estimation(current_pose, frame_data, model_data, camera_parameters,
+    //                                                 configuration.num_levels,
+    //                                                 configuration.distance_threshold, configuration.angle_threshold,
+    //                                                 configuration.icp_iterations);
+    //     }
+    //     if (!icp_success)
+    //         return false;
 
-        poses.push_back(current_pose);
+    //     poses.push_back(current_pose);
 
-        // STEP 3: Surface reconstruction
-        internal::cuda::surface_reconstruction(frame_data.depth_pyramid[0], frame_data.color_pyramid[0],
-                                               volume, camera_parameters, configuration.truncation_distance,
-                                               current_pose.inverse());
+    //     // STEP 3: Surface reconstruction
+    //     internal::cuda::surface_reconstruction(frame_data.depth_pyramid[0], frame_data.ir_pyramid[0],
+    //                                            volume, camera_parameters, configuration.truncation_distance,
+    //                                            current_pose.inverse());
 
-        // Step 4: Surface prediction
-        for (int level = 0; level < configuration.num_levels; ++level)
-            internal::cuda::surface_prediction(volume, model_data.vertex_pyramid[level],
-                                               model_data.normal_pyramid[level],
-                                               model_data.color_pyramid[level],
-                                               camera_parameters.level(level), configuration.truncation_distance,
-                                               current_pose);
+    //     // Step 4: Surface prediction
+    //     for (int level = 0; level < configuration.num_levels; ++level)
+    //         internal::cuda::surface_prediction(volume, model_data.vertex_pyramid[level],
+    //                                            model_data.normal_pyramid[level],
+    //                                            model_data.color_pyramid[level],
+    //                                            camera_parameters.level(level), configuration.truncation_distance,
+    //                                            current_pose);
 
-        if (configuration.use_output_frame) // Not using the output will speed up the processing
-            model_data.color_pyramid[0].download(last_model_frame);
+    //     if (configuration.use_output_frame) // Not using the output will speed up the processing
+    //         model_data.color_pyramid[0].download(last_model_frame);
 
-        ++frame_id;
+    //     ++frame_id;
 
-        return true;
-    }
+    //     return true;
+    // }
+
+    // bool Pipeline::process_frame(const cv::Mat_<float>& depth_map, const cv::Mat_<cv::Vec3b>& color_map)
+    // {
+    //     // STEP 1: Surface measurement
+    //     internal::FrameData frame_data = internal::surface_measurement(depth_map, camera_parameters,
+    //                                                                    configuration.num_levels,
+    //                                                                    configuration.depth_cutoff_distance,
+    //                                                                    configuration.bfilter_kernel_size,
+    //                                                                    configuration.bfilter_color_sigma,
+    //                                                                    configuration.bfilter_spatial_sigma);
+    //     frame_data.color_pyramid[0].upload(color_map);
+
+    //     // STEP 2: Pose estimation
+    //     bool icp_success { true };
+    //     if (frame_id > 0) { // Do not perform ICP for the very first frame
+    //         icp_success = internal::pose_estimation(current_pose, frame_data, model_data, camera_parameters,
+    //                                                 configuration.num_levels,
+    //                                                 configuration.distance_threshold, configuration.angle_threshold,
+    //                                                 configuration.icp_iterations);
+    //     }
+    //     if (!icp_success)
+    //         return false;
+
+    //     poses.push_back(current_pose);
+
+    //     // STEP 3: Surface reconstruction
+    //     internal::cuda::surface_reconstruction(frame_data.depth_pyramid[0], frame_data.color_pyramid[0],
+    //                                            volume, camera_parameters, configuration.truncation_distance,
+    //                                            current_pose.inverse());
+
+    //     // Step 4: Surface prediction
+    //     for (int level = 0; level < configuration.num_levels; ++level)
+    //         internal::cuda::surface_prediction(volume, model_data.vertex_pyramid[level],
+    //                                            model_data.normal_pyramid[level],
+    //                                            model_data.color_pyramid[level],
+    //                                            camera_parameters.level(level), configuration.truncation_distance,
+    //                                            current_pose);
+
+    //     if (configuration.use_output_frame) // Not using the output will speed up the processing
+    //         model_data.color_pyramid[0].download(last_model_frame);
+
+    //     ++frame_id;
+
+    //     return true;
+    // }
 
     cv::Mat Pipeline::get_last_model_frame() const
     {
