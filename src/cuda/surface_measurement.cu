@@ -65,7 +65,7 @@ namespace kinectfusion {
                 const int x = blockIdx.x * blockDim.x + threadIdx.x;
                 const int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-                // disable all the corner cases introduced by gpu allocation.
+                // disable all the corner cases introduced by gpu allocation and normal calculation.
                 if (x < 1 || x >= vertex_map.cols - 1 || y < 1 || y >= vertex_map.rows - 1)
                     return;
 
